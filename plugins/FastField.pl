@@ -46,7 +46,7 @@ sub init_registry {
         config_settings => {
             'LoadCustomFieldMode' => {
                 type => 'ARRAY',
-                default => [ 'rebuild', 'preview', 'save' ],
+                default => [ 'rebuild', 'preview', 'save', 'delete' ],
             },
         },
     } );
