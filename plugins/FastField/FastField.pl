@@ -14,7 +14,7 @@ my $plugin = __PACKAGE__->new( {
     author_name => 'Alfasado Inc.',
     author_link => 'http://alfasado.net/',
     description => '<__trans phrase="Fast Loading CustomField.">',
-    version => '0.1',
+    version => '0.3',
 } );
 
 sub init_registry {
@@ -46,13 +46,16 @@ sub init_registry {
         config_settings => {
             'LoadCustomFieldMode' => {
                 type => 'ARRAY',
-                default => [ 'view', 'rebuild', 'preview', 'save', 'delete' ],
+                default => [ 'view', 'rebuild', 'preview', 'save', 'dialog_clone', 'backup',
+                             'delete', 'download', 'upload', 'import', 'im', 'recover', 'export',
+                             'edit_revision', 'cfg', 'edit', 'restore',
+                           ],
             },
         },
     } );
 }
-
 MT->add_plugin( $plugin );
+
 {
     require CustomFields::Util;
     no warnings 'redefine';
@@ -66,16 +69,20 @@ MT->add_plugin( $plugin );
         # require Time::HiRes;
         # my $start = Time::HiRes::time();
         if ( ref $app eq 'MT::App::CMS' ) {
-            my $load_at = $app->config( 'LoadCustomFieldMode' );
-            require CGI;
-            my $q = new CGI;
-            my $mode = $q->param( '__mode' );
-            return unless $mode;
-            $mode =~ s/_.*$//;
-            if (! grep( /^$mode$/, @$load_at ) ) {
-                # my $end = Time::HiRes::time();
-                # MT->log( $end - $start );
-                return;
+            if ( $^O eq 'MSWin32' && lc $ENV{ 'REQUEST_METHOD' } eq 'post' ) {
+                # pass
+            } else {
+                my $load_at = $app->config( 'LoadCustomFieldMode' );
+                require CGI;
+                my $q = new CGI;
+                my $mode = $q->param( '__mode' );
+                return unless $mode;
+                $mode =~ s/_.*$//;
+                if (! grep( /^$mode$/, @$load_at ) ) {
+                    # my $end = Time::HiRes::time();
+                    # MT->log( $end - $start );
+                    return;
+                }
             }
         }
         require File::Spec;
