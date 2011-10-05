@@ -14,7 +14,7 @@ my $plugin = __PACKAGE__->new( {
     author_name => 'Alfasado Inc.',
     author_link => 'http://alfasado.net/',
     description => '<__trans phrase="Fast Loading CustomField.">',
-    version => '0.3',
+    version => '0.4',
 } );
 
 sub init_registry {
@@ -120,6 +120,7 @@ MT->add_plugin( $plugin );
                 CustomFields::Field->load_iter;
             };
             return unless $iter;
+            $yaml = undef;
             while ( my $field = $iter->() ) {
                 my $id = $field->basename . '.' . $field->blog_id;
                 $yaml->{ $id } = { basename => $field->basename,

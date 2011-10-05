@@ -41,7 +41,7 @@ sub post_change_field {
     require MT::Memcached;
     if ( MT::Memcached->is_available ) {
         my $memcached = MT::Memcached->instance;
-        $memcached->set( 'plugin-fastfield-init' => time() );
+        $memcached->set( 'plugin-fastfield-YAML' => undef );
     }
     $r->cache( 'plugin-fastfield-post_save_field:' . $obj->id, 1 );
     return 1;
