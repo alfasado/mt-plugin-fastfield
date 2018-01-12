@@ -12,9 +12,9 @@ my $plugin = __PACKAGE__->new( {
     key  => 'fastfield',
     name => 'Fast Field',
     author_name => 'Alfasado Inc.',
-    author_link => 'http://alfasado.net/',
+    author_link => 'https://alfasado.net/',
     description => '<__trans phrase="Fast Loading CustomField.">',
-    version => '1.04',
+    version => '1.05',
 } );
 
 sub init_registry {
