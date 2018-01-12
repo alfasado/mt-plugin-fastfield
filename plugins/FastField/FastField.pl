@@ -12,9 +12,9 @@ my $plugin = __PACKAGE__->new( {
     key  => 'fastfield',
     name => 'Fast Field',
     author_name => 'Alfasado Inc.',
-    author_link => 'http://alfasado.net/',
+    author_link => 'https://alfasado.net/',
     description => '<__trans phrase="Fast Loading CustomField.">',
-    version => '0.4',
+    version => '1.05',
 } );
 
 sub init_registry {
@@ -46,15 +46,34 @@ sub init_registry {
         config_settings => {
             'LoadCustomFieldMode' => {
                 type => 'ARRAY',
-                default => [ 'view', 'rebuild', 'preview', 'save', 'dialog_clone', 'backup',
+                default => [ 'default', 'view', 'rebuild', 'preview', 'save', 'dialog_clone', 'backup',
                              'delete', 'download', 'upload', 'import', 'im', 'recover', 'export',
-                             'edit_revision', 'cfg', 'edit', 'restore',
+                             'edit_revision', 'cfg_prefs',
                            ],
             },
         },
     } );
 }
 MT->add_plugin( $plugin );
+
+sub parse_get_params {
+    my ( $key ) = @_;
+    return if lc $ENV{ 'REQUEST_METHOD' } eq 'post';
+    my $buffer = $ENV{ 'QUERY_STRING' };
+    my @pairs = split( /&/, $buffer );
+    my %params;
+    for my $pair ( @pairs ) {
+        my ( $name, $value ) = split( /=/, $pair );
+        $value =~ tr/+/ /;
+        $value =~ s/%([a-fA-F0-9][a-fA-F0-9])/pack("C", hex($1))/eg;
+        $params{ $name } = $value;
+    }
+    if ( $key ) {
+        return $params{ $key };
+    } else {
+        return \%params;
+    }
+}
 
 {
     require CustomFields::Util;
@@ -68,20 +87,34 @@ MT->add_plugin( $plugin );
         $r->cache( 'plugin-fastfield-init', 1 );
         # require Time::HiRes;
         # my $start = Time::HiRes::time();
-        if ( ref $app eq 'MT::App::CMS' ) {
-            if ( $^O eq 'MSWin32' && lc $ENV{ 'REQUEST_METHOD' } eq 'post' ) {
-                # pass
-            } else {
-                my $load_at = $app->config( 'LoadCustomFieldMode' );
-                require CGI;
-                my $q = new CGI;
-                my $mode = $q->param( '__mode' );
-                return unless $mode;
-                $mode =~ s/_.*$//;
-                if (! grep( /^$mode$/, @$load_at ) ) {
-                    # my $end = Time::HiRes::time();
-                    # MT->log( $end - $start );
-                    return;
+        unless ( $ENV{ FAST_CGI } || MT->config->PIDFilePath ) {
+            if ( ref( $app ) eq 'MT::App::CMS' ) {
+                unless ( $^O eq 'MSWin32' && lc $ENV{ REQUEST_METHOD } eq 'post' ) {
+                    my $load_at = $app->config( 'LoadCustomFieldMode' );
+                    if ( $load_at ) {
+                        if ( ( ref $load_at ) ne 'ARRAY' ) {
+                            my @cfgs = split( /,/, $load_at );
+                            $load_at = \@cfgs;
+                        }
+                        my $mode = $app->mode;
+                        unless ( $mode ) {
+                            $mode = $app->param( '__mode' );
+                        }
+                        unless ( $mode ) {
+                            $mode = parse_get_params( '__mode' );
+                        }
+                        unless ( $mode ) {
+                            $r->cache( 'plugin-fastfield-skip', 1 );
+                            return;
+                        }
+                        $mode =~ s/_.*$//;
+                        if (! grep( /^$mode/, @$load_at ) ) {
+                            # my $end = Time::HiRes::time();
+                            # MT->log( $end - $start );
+                            $r->cache( 'plugin-fastfield-skip', 1 );
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -113,6 +146,7 @@ MT->add_plugin( $plugin );
             }
         }
         if (! $yaml ) {
+            $yaml = {};
             my $iter = eval {
                 require MT::Object;
                 my $driver = MT::Object->driver;
@@ -120,30 +154,36 @@ MT->add_plugin( $plugin );
                 CustomFields::Field->load_iter;
             };
             return unless $iter;
-            $yaml = undef;
+            my $columns = MT->model( 'field' )->column_names;
             while ( my $field = $iter->() ) {
-                my $id = $field->basename . '.' . $field->blog_id;
-                $yaml->{ $id } = { basename => $field->basename,
-                                   blog_id  => $field->blog_id,
-                                   obj_type => $field->obj_type,
-                                   tag => $field->tag,
-                                   type => $field->type, };
-            }
-            if ( $memcached && $yaml ) {
-                $memcached->set( 'plugin-fastfield-YAML' => $yaml );
-                $memcached->set( 'plugin-fastfield-init' => time() );
-            }
-        }
-        if ( $yaml ) {
-            foreach my $cf ( keys %$yaml ) {
-                my $record = $yaml->{ $cf };
-                my $field = CustomFields::Field->new;
-                $field->set_values( $record );
                 push( @fields, $field );
                 $meta{ $field->obj_type }{ 'field.' . $field->basename } = $field->type;
+                if ( $memcached ) {
+                    my $id = $field->basename . '.' . $field->blog_id;
+                    my $field_vals;
+                    for my $key ( @$columns ) {
+                        $field_vals->{ $key } = $field->$key;
+                    }
+                    $yaml->{ $id } = $field_vals;
+                }
             }
-        } else {
-            return;
+        }
+        if ( $memcached && $yaml ) {
+            $memcached->set( 'plugin-fastfield-YAML' => $yaml );
+            $memcached->set( 'plugin-fastfield-init' => time() );
+        }
+        if ( @fields == 0 ) {
+            if ( $yaml ) {
+                foreach my $cf ( keys %$yaml ) {
+                    my $record = $yaml->{ $cf };
+                    my $field = CustomFields::Field->new;
+                    $field->set_values( $record );
+                    push( @fields, $field );
+                    $meta{ $field->obj_type }{ 'field.' . $field->basename } = $field->type;
+                }
+            } else {
+                return;
+            }
         }
         my $component = MT->component( 'commercial' );
         $component->{ customfields } = \@fields;

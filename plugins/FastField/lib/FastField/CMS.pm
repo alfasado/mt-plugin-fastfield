@@ -1,13 +1,15 @@
 package FastField::CMS;
+#use strict;
 
 sub download_cf_yaml {
     my $app = shift;
     my $user = $app->user;
-    my $admin = $user->is_superuser;
-    return $app->trans_error( 'Permission denied.' ) if ! $user->is_superuser;
+    unless ($user->is_superuser) {
+        return $app->trans_error( 'Permission denied.' );
+    }
     require CustomFields::Field;
     $app->{ no_print_body } = 1;
-    $app->set_header( 'Content-Disposition' => "attachment; filename=Fields.yaml" );
+    $app->set_header( 'Content-Disposition' => 'attachment; filename=Fields.yaml' );
     $app->send_http_header( 'text/yaml' );
     my $iter = CustomFields::Field->load_iter( undef );
     require YAML::Tiny;
@@ -23,10 +25,13 @@ sub download_cf_yaml {
                         basename => $basename,
                         blog_id  => $blog_id,
                         tag      => $tag,
-                        type     => $type };
+                        type     => $type,
+                        $field->has_column( 'customobject' ) ? ( customobject => $field->customobject ) : (),
+                        $field->has_column( 'customgroup' ) ? ( customgroup => $field->customgroup ) : (),
+                      };
         my $section = $yaml->write_string();
-        $section =~ s!\-\-\-\n!!g;
-        print $section;
+        $section =~ s!---\n!!g;
+        $app->print_encode( "$section" );
     }
 }
 
@@ -34,8 +39,8 @@ sub post_change_field {
     my ( $cb, $obj ) = @_;
     require MT::Request;
     my $r = MT::Request->instance;
-    my $cache = $r->cache( 'plugin-fastfield-post_save_field:' . $obj->id );
-    if ( $cache ) {
+    my $k = 'plugin-fastfield-post_save_field:' . $obj->id;
+    if ( my $cache = $r->cache( $k ) ) {
         return 1;
     }
     require MT::Memcached;
@@ -43,7 +48,7 @@ sub post_change_field {
         my $memcached = MT::Memcached->instance;
         $memcached->set( 'plugin-fastfield-YAML' => undef );
     }
-    $r->cache( 'plugin-fastfield-post_save_field:' . $obj->id, 1 );
+    $r->cache( $k, 1 );
     return 1;
 }
 
