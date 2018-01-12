@@ -14,7 +14,7 @@ my $plugin = __PACKAGE__->new( {
     author_name => 'Alfasado Inc.',
     author_link => 'http://alfasado.net/',
     description => '<__trans phrase="Fast Loading CustomField.">',
-    version => '1.03',
+    version => '1.04',
 } );
 
 sub init_registry {
@@ -146,6 +146,7 @@ sub parse_get_params {
             }
         }
         if (! $yaml ) {
+            $yaml = {};
             my $iter = eval {
                 require MT::Object;
                 my $driver = MT::Object->driver;
